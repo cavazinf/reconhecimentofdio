@@ -1,0 +1,62 @@
+import tensorflow as tf
+import cv2
+import numpy as np
+
+# Carregar o modelo de detecção de faces pré-treinado
+face_detection_model = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'res10_300x300_ssd_iter_140000.caffemodel')
+
+# Carregar o modelo de reconhecimento facial pré-treinado
+face_recognition_model = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# Função para detectar faces na imagem
+def detect_faces(image):
+    blob = cv2.dnn.blobFromImage(image, 1.0, (300, 300), (104.0, 177.0, 123.0))
+    face_detection_model.setInput(blob)
+    detections = face_detection_model.forward()
+    return detections
+
+# Função para recortar e redimensionar as faces detectadas
+def preprocess_faces(image, detections):
+    h, w = image.shape[:2]
+    faces = []
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > 0.5:
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            startX, startY, endX, endY = box.astype("int")
+            face = image[startY:endY, startX:endX]
+            face = cv2.resize(face, (224, 224))
+            faces.append(face)
+    return faces
+
+# Função para reconhecer a identidade das faces
+def recognize_faces(faces):
+    face_tensors = np.array(faces) / 255.0
+    predictions = face_recognition_model.predict(face_tensors)
+    labels = tf.keras.applications.mobilenet_v2.decode_predictions(predictions)
+    identities = [label[0][1] for label in labels]
+    return identities
+
+# Carregar a imagem de teste
+image_path = 'caminho/para/imagem.jpg'
+image = cv2.imread(image_path)
+
+# Detectar as faces na imagem
+detections = detect_faces(image)
+
+# Recortar e redimensionar as faces detectadas
+faces = preprocess_faces(image, detections)
+
+# Reconhecer a identidade das faces
+identities = recognize_faces(faces)
+
+# Desenhar retângulos ao redor das faces e mostrar as identidades
+for i, identity in enumerate(identities):
+    startX, startY, endX, endY = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+    cv2.rectangle(image, (int(startX), int(startY)), (int(endX), int(endY)), (0, 255, 0), 2)
+    cv2.putText(image, identity, (int(startX), int(startY) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+# Exibir a imagem com as faces detectadas e reconhecidas
+cv2.imshow('Reconhecimento Facial', image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
